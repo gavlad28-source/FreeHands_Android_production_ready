@@ -1,0 +1,43 @@
+name: Android Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > my-release-key.jks
+
+      - name: Grant execute permission for Gradlew
+        run: chmod +x FreeHands_Android_production_with_wrapper/gradlew
+
+      - name: Build Release AAB
+        run: |
+          export KEYSTORE_FILE=$(pwd)/my-release-key.jks
+          ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper bundleRelease
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: FreeHands_Android_production_with_wrapper/FreeHands_Android_production_fixed/build/outputs/bundle/release/*.aab
