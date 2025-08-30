@@ -1,16 +1,17 @@
-name: Android Release Build & Deploy
+name: Android Release Build
 
 on:
   workflow_dispatch:
   push:
-    tags: [ 'v*' ]
+    branches:
+      - main
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout sources
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -18,53 +19,25 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: gradle
 
-      # (Не обязательно, но полезно) Убедиться, что есть нужные SDK
-      - name: Install Android SDK components
+      - name: Decode Keystore
         run: |
-          yes | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
-          sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > my-release-key.jks
 
-      - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > my-release-key.jks
-
-      - name: Decode Play service account JSON
-        run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}" | base64 --decode > service-account.json
-
-      - name: Grant execute to Gradlew
+      - name: Grant execute permission for Gradlew
         run: chmod +x FreeHands_Android_production_with_wrapper/gradlew
 
-      # 🔎 Быстрая проверка наличия секретов/файлов (без утечки значений)
-      - name: Verify secrets/files presence
+      - name: Build Signed APK
         run: |
-          [ -s my-release-key.jks ] && echo "keystore: OK" || (echo "keystore missing" && exit 1)
-          [ -s service-account.json ] && echo "service account json: OK" || (echo "service account json missing" && exit 1)
-          test -n "${{ secrets.KEYSTORE_PASSWORD }}" && echo "KEYSTORE_PASSWORD: OK" || (echo "KEYSTORE_PASSWORD missing" && exit 1)
-          test -n "${{ secrets.KEY_ALIAS }}" && echo "KEY_ALIAS: OK" || (echo "KEY_ALIAS missing" && exit 1)
-          test -n "${{ secrets.KEY_PASSWORD }}" && echo "KEY_PASSWORD: OK" || (echo "KEY_PASSWORD missing" && exit 1)
+          ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper :app:assembleRelease \
+          -Pandroid.injected.signing.store.file=$(pwd)/my-release-key.jks \
+          -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+          -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+          -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      # 🧪 Посмотреть какие publish-таски реально есть у модуля
-      - name: List publish tasks
-        run: ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper :app:tasks --all | grep -i publish || true
-
-      # 🏗️ Сборка bundle с подробными логами
-      - name: Build AAB (bundleRelease)
-        env:
-          KEYSTORE_FILE: my-release-key.jks
-        run: ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper :app:bundleRelease --stacktrace --info --no-daemon
-
-      # ⬆️ Сохранить AAB как артефакт даже при сбое следующих шагов
-      - name: Upload AAB artifact
-        if: always()
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: release-aab
-          path: FreeHands_Android_production_with_wrapper/FreeHands_Android_production_fixed/build/outputs/bundle/release/*.aab
-
-      # 🚀 Публикация в Google Play (internal track)
-      - name: Publish to Play (internal)
-        env:
-          KEYSTORE_FILE: my-release-key.jks
-          PLAY_SERVICE_ACCOUNT_JSON: service-account.json
-        run: ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper :app:publishRelease --stacktrace --info --no-daemon
+          name: release-apk
+          path: FreeHands_Android_production_with_wrapper/FreeHands_Android_production_fixed/build/outputs/apk/release/*.apk
