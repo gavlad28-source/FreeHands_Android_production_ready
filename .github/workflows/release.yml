@@ -1,0 +1,49 @@
+name: Android Release Build (Temporary Key)
+
+on:
+  workflow_dispatch:   # Manual run
+  push:
+    tags:
+      - 'v*-test'      # Run on tags like v1.0.0-test
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Generate temporary keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore release.keystore \
+            -storepass password \
+            -keypass password \
+            -alias temp-key \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Temp, OU=CI, O=GitHub, L=Internet, S=World, C=US"
+          echo "KEYSTORE_FILE=$(pwd)/release.keystore" >> $GITHUB_ENV
+          echo "KEYSTORE_PASSWORD=password" >> $GITHUB_ENV
+          echo "KEY_ALIAS=temp-key" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=password" >> $GITHUB_ENV
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x FreeHands_Android_production_with_wrapper/gradlew
+
+      - name: Build Release APK
+        run: ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper :app:assembleRelease
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: FreeHands_Android_production_with_wrapper/FreeHands_Android_production_fixed/build/outputs/apk/release/*.apk
