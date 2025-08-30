@@ -28,16 +28,27 @@ jobs:
       - name: Grant execute permission for Gradlew
         run: chmod +x FreeHands_Android_production_with_wrapper/gradlew
 
-      - name: Build Signed APK
+      - name: Build Signed APK & AAB
         run: |
           ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper :app:assembleRelease \
-          -Pandroid.injected.signing.store.file=$(pwd)/my-release-key.jks \
-          -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-          -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-          -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+            -Pandroid.injected.signing.store.file=$(pwd)/my-release-key.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+          ./FreeHands_Android_production_with_wrapper/gradlew -p ./FreeHands_Android_production_with_wrapper :app:bundleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/my-release-key.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: FreeHands_Android_production_with_wrapper/FreeHands_Android_production_fixed/build/outputs/apk/release/*.apk
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: FreeHands_Android_production_with_wrapper/FreeHands_Android_production_fixed/build/outputs/bundle/release/*.aab
